@@ -30,8 +30,7 @@
 
 RCT_EXPORT_MODULE()
 
-- (void)paymentQueue:(SKPaymentQueue *)queue
- updatedTransactions:(NSArray *)transactions
+- (void)paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray *)transactions
 {
     for (SKPaymentTransaction *transaction in transactions) {
         switch (transaction.transactionState) {
@@ -213,9 +212,17 @@ RCT_EXPORT_METHOD(receiptData:(RCTResponseSenderBlock)callback)
         products = [NSMutableArray arrayWithArray:response.products];
         NSMutableArray *productsArrayForJS = [NSMutableArray array];
         for(SKProduct *item in response.products) {
+            NSDictionary *introductoryPrice = [InAppUtils parseIntroductoryPrice:item];
+            NSDictionary *subscriptionPeriod;
+            
+            if(@available(iOS 11.2, *)) {
+                subscriptionPeriod = [InAppUtils parseSubscriptionPeriod:item.subscriptionPeriod];
+            }
+
             NSDictionary *product = @{
                                       @"identifier": item.productIdentifier,
                                       @"price": item.price,
+                                      @"introductoryPrice": (introductoryPrice == nil) ? [NSNull null] : introductoryPrice,
                                       @"currencySymbol": [item.priceLocale objectForKey:NSLocaleCurrencySymbol],
                                       @"currencyCode": [item.priceLocale objectForKey:NSLocaleCurrencyCode],
                                       @"priceString": item.priceString,
@@ -223,6 +230,7 @@ RCT_EXPORT_METHOD(receiptData:(RCTResponseSenderBlock)callback)
                                       @"downloadable": item.downloadable ? @"true" : @"false" ,
                                       @"description": item.localizedDescription ? item.localizedDescription : @"",
                                       @"title": item.localizedTitle ? item.localizedTitle : @"",
+                                      @"subscriptionPeriod": subscriptionPeriod,
                                       };
             [productsArrayForJS addObject:product];
         }
@@ -263,6 +271,71 @@ RCT_EXPORT_METHOD(receiptData:(RCTResponseSenderBlock)callback)
 - (void)dealloc
 {
     [[SKPaymentQueue defaultQueue] removeTransactionObserver:self];
+}
+
+#pragma mark Static
+
++ (NSDictionary *)parseIntroductoryPrice: (SKProduct *)product {
+    if(@available(iOS 11.2, *)) {
+        if (product != nil && product.introductoryPrice != nil) {
+            // paymentMode: Returning as string for ease of use and code resilience
+            NSString *paymentMode;
+            switch (product.introductoryPrice.paymentMode) {
+                case SKProductDiscountPaymentModeFreeTrial:
+                    paymentMode = @"free_trial";
+                    break;
+                case SKProductDiscountPaymentModePayAsYouGo:
+                    paymentMode = @"pay_as_you_go";
+                    break;
+                case SKProductDiscountPaymentModePayUpFront:
+                    paymentMode = @"pay_up_front";
+                    break;
+                default:
+                    paymentMode = @"unavailable";
+                    break;
+            }
+
+            NSDictionary *subscriptionPeriod = [InAppUtils parseSubscriptionPeriod:product.introductoryPrice.subscriptionPeriod];
+            NSDictionary *introductoryPrice = @{
+                                                @"price": product.introductoryPrice.price,
+                                                @"numberOfPeriods": [[NSNumber alloc] initWithLong:product.introductoryPrice.numberOfPeriods],
+                                                @"paymentMode": paymentMode,
+                                                @"subscriptionPeriod": subscriptionPeriod,
+                                                };
+            return introductoryPrice;
+        }
+    }
+
+    return nil;
+}
+
++ (NSDictionary *)parseSubscriptionPeriod: (SKProductSubscriptionPeriod *)period {
+    // subscriptionPeriod: Returning as Dictionary { unit: NSString, numberOfUnits: NSNumber }
+    NSString *subscriptionPeriodUnit;
+    switch (period.unit) {
+        case SKProductPeriodUnitDay:
+            subscriptionPeriodUnit = @"day";
+            break;
+        case SKProductPeriodUnitWeek:
+            subscriptionPeriodUnit = @"week";
+            break;
+        case SKProductPeriodUnitMonth:
+            subscriptionPeriodUnit = @"month";
+            break;
+        case SKProductPeriodUnitYear:
+            subscriptionPeriodUnit = @"year";
+            break;
+        default:
+            subscriptionPeriodUnit = @"unavailable";
+            break;
+    }
+
+    NSDictionary *subscriptionPeriod = @{
+                                         @"unit": subscriptionPeriodUnit,
+                                         @"numberOfUnits": [[NSNumber alloc] initWithLong:period.numberOfUnits],
+                                         };
+
+    return subscriptionPeriod;
 }
 
 #pragma mark Private
