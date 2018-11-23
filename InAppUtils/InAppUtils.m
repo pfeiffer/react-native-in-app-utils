@@ -230,7 +230,7 @@ RCT_EXPORT_METHOD(receiptData:(RCTResponseSenderBlock)callback)
                                       @"downloadable": item.downloadable ? @"true" : @"false" ,
                                       @"description": item.localizedDescription ? item.localizedDescription : @"",
                                       @"title": item.localizedTitle ? item.localizedTitle : @"",
-                                      @"subscriptionPeriod": subscriptionPeriod,
+                                      @"subscriptionPeriod": (subscriptionPeriod == nil) ? [NSNull null] : subscriptionPeriod,
                                       };
             [productsArrayForJS addObject:product];
         }
