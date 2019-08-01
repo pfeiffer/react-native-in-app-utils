@@ -6,7 +6,7 @@
 
 @implementation InAppUtils
 {
-    NSArray *products;
+    NSMutableArray *products;
     NSMutableDictionary *_callbacks;
 }
 
@@ -14,6 +14,7 @@
 {
     if ((self = [super init])) {
         _callbacks = [[NSMutableDictionary alloc] init];
+        products = [[NSMutableArray alloc] init];
         [[SKPaymentQueue defaultQueue] addTransactionObserver:self];
     }
     return self;
@@ -91,14 +92,7 @@ RCT_EXPORT_METHOD(purchaseProduct:(NSString *)productIdentifier
                   username:(NSString *)username
                   callback:(RCTResponseSenderBlock)callback
 {
-    SKProduct *product;
-    for(SKProduct *p in products)
-    {
-        if([productIdentifier isEqualToString:p.productIdentifier]) {
-            product = p;
-            break;
-        }
-    }
+    SKProduct *product = [self getCachedProduct:productIdentifier];
 
     if(product) {
         SKMutablePayment *payment = [SKMutablePayment paymentWithProduct:product];
@@ -208,13 +202,17 @@ RCT_EXPORT_METHOD(receiptData:(RCTResponseSenderBlock)callback)
 {
     NSString *key = RCTKeyForInstance(request);
     RCTResponseSenderBlock callback = _callbacks[key];
+
     if (callback) {
-        products = [NSMutableArray arrayWithArray:response.products];
         NSMutableArray *productsArrayForJS = [NSMutableArray array];
         for(SKProduct *item in response.products) {
+            if (![self getCachedProduct:item.productIdentifier]) {
+                [products addObject:item];
+            }
+
             NSDictionary *introductoryPrice = [InAppUtils parseIntroductoryPrice:item];
             NSDictionary *subscriptionPeriod;
-            
+
             if(@available(iOS 11.2, *)) {
                 subscriptionPeriod = [InAppUtils parseSubscriptionPeriod:item.subscriptionPeriod];
             }
@@ -266,6 +264,19 @@ RCT_EXPORT_METHOD(receiptData:(RCTResponseSenderBlock)callback)
     }
 
     return purchase;
+}
+
+- (SKProduct *)getCachedProduct: (NSString *)productIdentifier {
+    SKProduct *product;
+    for(SKProduct *p in products)
+    {
+        if([productIdentifier isEqualToString:p.productIdentifier]) {
+            product = p;
+            break;
+        }
+    }
+
+    return product;
 }
 
 - (void)dealloc
